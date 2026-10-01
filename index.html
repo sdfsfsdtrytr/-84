@@ -27,6 +27,11 @@
         border-radius: 8px;
         background: #ffffff;
       }
+
+      .text-options {
+        display: grid;
+        gap: 10px;
+      }
     </style>
   </head>
   <body class="control-page">
@@ -59,6 +64,11 @@
           <input id="wordsToggle" type="checkbox">
           <span>Показывать слова</span>
         </label>
+        <label class="color-pick-row">
+          <input id="screenColor" type="color" value="#19c15f">
+          <span>Любой цвет экрана</span>
+        </label>
+        <button id="sendScreenColor" type="button">Поставить выбранный цвет</button>
         <p id="lastAction" class="mini-status"></p>
       </section>
 
@@ -74,10 +84,20 @@
       <section class="section">
         <h2>Текст</h2>
         <textarea id="message" rows="4" placeholder="Напиши текст для экрана"></textarea>
-        <label class="color-pick-row">
-          <input id="textColor" type="color" value="#111111">
-          <span>Цвет текста</span>
-        </label>
+        <div class="text-options">
+          <label class="color-pick-row">
+            <input id="textColor" type="color" value="#111111">
+            <span>Цвет текста</span>
+          </label>
+          <label class="switch-row">
+            <input id="textBackgroundEnabled" type="checkbox">
+            <span>Фон для текста</span>
+          </label>
+          <label class="color-pick-row">
+            <input id="textBackgroundColor" type="color" value="#ffffff">
+            <span>Цвет фона текста</span>
+          </label>
+        </div>
         <button id="sendText" type="button">Готово</button>
       </section>
 
@@ -109,8 +129,11 @@
       const statusText = document.querySelector("#status");
       const lastAction = document.querySelector("#lastAction");
       const wordsToggle = document.querySelector("#wordsToggle");
+      const screenColor = document.querySelector("#screenColor");
       const message = document.querySelector("#message");
       const textColor = document.querySelector("#textColor");
+      const textBackgroundEnabled = document.querySelector("#textBackgroundEnabled");
+      const textBackgroundColor = document.querySelector("#textBackgroundColor");
       const orientationButtons = document.querySelectorAll("[data-orientation]");
 
       let state = {
@@ -121,6 +144,9 @@
         media: null,
         orientation: "landscape",
         textColor: "#111111",
+        textBackgroundEnabled: false,
+        textBackgroundColor: "#ffffff",
+        customColor: null,
         updatedAt: Date.now(),
       };
 
@@ -148,9 +174,20 @@
           sendState({
             type: "color",
             color: button.dataset.color,
+            customColor: null,
             showWords: wordsToggle.checked,
             media: null,
           });
+        });
+      });
+
+      document.querySelector("#sendScreenColor").addEventListener("click", () => {
+        sendState({
+          type: "color",
+          color: "custom",
+          customColor: screenColor.value,
+          showWords: false,
+          media: null,
         });
       });
 
@@ -171,6 +208,8 @@
           type: "text",
           customText: message.value,
           textColor: textColor.value,
+          textBackgroundEnabled: textBackgroundEnabled.checked,
+          textBackgroundColor: textBackgroundColor.value,
           media: null,
         });
       });
@@ -198,8 +237,11 @@
           const data = await response.json();
           if (data) state = { ...state, ...data };
           wordsToggle.checked = Boolean(state.showWords);
+          screenColor.value = state.customColor || "#19c15f";
           message.value = state.customText || "";
           textColor.value = state.textColor || "#111111";
+          textBackgroundEnabled.checked = Boolean(state.textBackgroundEnabled);
+          textBackgroundColor.value = state.textBackgroundColor || "#ffffff";
           statusText.textContent = "База подключена";
         } catch (error) {
           statusText.textContent = "База не отвечает";
