@@ -9,12 +9,12 @@
   </head>
   <body class="control-page">
     <main id="controlGate" class="gate">
-      <form id="controlLogin" class="gate-card">
+      <div class="gate-card">
         <h1>Управление</h1>
-        <input id="controlPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль">
-        <button type="submit">Войти</button>
+        <input id="controlPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль" onkeydown="if(event.key === 'Enter'){ unlockPanel(); }">
+        <button type="button" onclick="unlockPanel()">Войти</button>
         <p id="controlError" class="error" hidden>Неверный пароль</p>
-      </form>
+      </div>
     </main>
 
     <main id="panel" class="panel" hidden>
@@ -84,7 +84,6 @@
       window.databasePath = "statusScreen/current";
       window.panelPassword = "2304";
 
-      const login = document.querySelector("#controlLogin");
       const gate = document.querySelector("#controlGate");
       const panel = document.querySelector("#panel");
       const passwordInput = document.querySelector("#controlPassword");
@@ -106,19 +105,20 @@
         orientation: "landscape",
       };
 
-      if (localStorage.getItem("statusPanelUnlocked") === "yes") {
-        openPanel();
-      }
-
-      login.addEventListener("submit", (event) => {
-        event.preventDefault();
-        if (passwordInput.value.trim() !== window.panelPassword) {
+      window.unlockPanel = function () {
+        const typedPassword = passwordInput.value.replace(/\D/g, "");
+        if (typedPassword !== window.panelPassword) {
           error.hidden = false;
           return;
         }
+        error.hidden = true;
         localStorage.setItem("statusPanelUnlocked", "yes");
         openPanel();
-      });
+      };
+
+      if (localStorage.getItem("statusPanelUnlocked") === "yes") {
+        setTimeout(openPanel, 0);
+      }
 
       document.querySelectorAll("[data-color]").forEach((button) => {
         button.addEventListener("click", () => {
