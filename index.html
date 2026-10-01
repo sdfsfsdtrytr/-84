@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Управление экраном</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101318'/%3E%3Cpath d='M18 22h28v20H18z' fill='%23f7d64a'/%3E%3Cpath d='M24 29h16v6H24z' fill='%23101318'/%3E%3C/svg%3E">
+  </head>
+  <body class="control-page">
+    <main id="controlGate" class="gate">
+      <form id="controlLogin" class="gate-card">
+        <h1>Управление</h1>
+        <input id="controlPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль">
+        <button type="submit">Войти</button>
+        <p id="controlError" class="error" hidden>Неверный пароль</p>
+      </form>
+    </main>
+
+    <main id="panel" class="panel" hidden>
+      <header class="panel-header">
+        <div>
+          <h1>Пульт экрана</h1>
+          <p id="connection">Подключено</p>
+        </div>
+        <button id="blankButton" class="ghost-button" type="button">Очистить</button>
+      </header>
+
+      <section class="section">
+        <h2>Цвет</h2>
+        <div class="color-grid">
+          <button class="color-button green" data-color="green" type="button">Зелёный</button>
+          <button class="color-button yellow" data-color="yellow" type="button">Жёлтый</button>
+          <button class="color-button red" data-color="red" type="button">Красный</button>
+        </div>
+        <label class="switch-row">
+          <input id="wordsToggle" type="checkbox">
+          <span>Показывать слова</span>
+        </label>
+      </section>
+
+      <section class="section">
+        <h2>Положение телефона</h2>
+        <div class="segmented" role="group" aria-label="Положение телефона">
+          <button data-orientation="landscape" type="button" class="active">Горизонтально</button>
+          <button data-orientation="portrait" type="button">Вертикально</button>
+          <button data-orientation="upside" type="button">Вверх ногами</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Текст</h2>
+        <textarea id="message" rows="4" placeholder="Напиши текст для экрана"></textarea>
+        <button id="sendText" type="button">Готово</button>
+      </section>
+
+      <section class="section">
+        <h2>Фото и видео</h2>
+        <div class="upload-row">
+          <label class="file-button">
+            Фото
+            <input id="imageInput" type="file" accept="image/*">
+          </label>
+          <label class="file-button">
+            Видео
+            <input id="videoInput" type="file" accept="video/*">
+          </label>
+        </div>
+        <p class="hint">Лучше брать короткие видео до 20 МБ.</p>
+      </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+    <script src="./app-config.js"></script>
+    <script>
+      const login = document.querySelector("#controlLogin");
+      const gate = document.querySelector("#controlGate");
+      const panel = document.querySelector("#panel");
+      const passwordInput = document.querySelector("#controlPassword");
+      const error = document.querySelector("#controlError");
+      const wordsToggle = document.querySelector("#wordsToggle");
+      const message = document.querySelector("#message");
+      const connection = document.querySelector("#connection");
+      const orientationButtons = document.querySelectorAll("[data-orientation]");
+
+      let stateRef = null;
+
+      let currentState = {
+        type: "blank",
+        color: null,
+        showWords: false,
+        customText: "",
+        media: null,
+        orientation: "landscape",
+      };
+
+      if (localStorage.getItem("statusPanelUnlocked") === "yes") {
+        openPanel();
+      }
+
+      login.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (passwordInput.value.trim() !== window.panelPassword) {
+          error.hidden = false;
+          return;
+        }
+        localStorage.setItem("statusPanelUnlocked", "yes");
+        openPanel();
+      });
+
+      document.querySelectorAll("[data-color]").forEach((button) => {
+        button.addEventListener("click", () => {
+          sendState({
+            type: "color",
+            color: button.dataset.color,
+            showWords: wordsToggle.checked,
+            media: null,
+          });
+        });
+      });
+
+      wordsToggle.addEventListener("change", () => {
+        sendState({ showWords: wordsToggle.checked });
+      });
+
+      orientationButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          orientationButtons.forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          sendState({ orientation: button.dataset.orientation });
+        });
+      });
+
+      document.querySelector("#sendText").addEventListener("click", () => {
+        sendState({
+          type: "text",
+          customText: message.value.trim(),
+          media: null,
+        });
+      });
+
+      document.querySelector("#blankButton").addEventListener("click", () => {
+        sendState({
+          type: "blank",
+          color: null,
+          customText: "",
+          media: null,
+        });
+      });
+
+      document.querySelector("#imageInput").addEventListener("change", (event) => {
+        sendFile(event.target.files[0], "image");
+      });
+
+      document.querySelector("#videoInput").addEventListener("change", (event) => {
+        sendFile(event.target.files[0], "video");
+      });
+
+      async function openPanel() {
+        gate.hidden = true;
+        panel.hidden = false;
+        connection.textContent = "Подключаю Firebase...";
+        try {
+          connectFirebase();
+          await refreshState();
+          connection.textContent = "Подключено";
+        } catch {
+          connection.textContent = "Firebase не подключился";
+        }
+      }
+
+      function connectFirebase() {
+        if (stateRef) return;
+        if (!window.firebase || !window.firebaseConfig) {
+          throw new Error("firebase_missing");
+        }
+        firebase.initializeApp(window.firebaseConfig);
+        stateRef = firebase.database().ref(window.databasePath);
+      }
+
+      function refreshState() {
+        return stateRef.once("value").then((snapshot) => {
+          if (!snapshot.exists()) {
+            return stateRef.set({ ...currentState, updatedAt: Date.now() });
+          }
+          currentState = { ...currentState, ...snapshot.val() };
+          wordsToggle.checked = Boolean(currentState.showWords);
+          message.value = currentState.customText || "";
+          orientationButtons.forEach((button) => {
+            button.classList.toggle("active", button.dataset.orientation === currentState.orientation);
+          });
+        });
+      }
+
+      function renderControlsFromState() {
+        wordsToggle.checked = Boolean(currentState.showWords);
+        message.value = currentState.customText || "";
+        orientationButtons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.orientation === currentState.orientation);
+        });
+      }
+
+      async function sendState(patch) {
+        currentState = { ...currentState, ...patch };
+        connection.textContent = "Отправляю...";
+        try {
+          connectFirebase();
+          await stateRef.update({ ...patch, updatedAt: Date.now() });
+          connection.textContent = "Подключено";
+        } catch {
+          connection.textContent = "Ошибка Firebase";
+        }
+      }
+
+      function sendFile(file, type) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          sendState({
+            type,
+            media: {
+              name: file.name,
+              mime: file.type,
+              dataUrl: reader.result,
+            },
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    </script>
+  </body>
+</html>
