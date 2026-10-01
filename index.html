@@ -3,46 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Управление экраном</title>
+    <title>Пульт экрана</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101318'/%3E%3Cpath d='M18 22h28v20H18z' fill='%23f7d64a'/%3E%3Cpath d='M24 29h16v6H24z' fill='%23101318'/%3E%3C/svg%3E">
-    <script>
-      window.panelPassword = "230493";
-      window.unlockPanel = function () {
-        const input = document.querySelector("#controlPassword");
-        const error = document.querySelector("#controlError");
-        const gate = document.querySelector("#controlGate");
-        const panel = document.querySelector("#panel");
-        const connection = document.querySelector("#connection");
-        const typedPassword = (input?.value || "").replace(/\D/g, "");
-
-        if (typedPassword !== window.panelPassword) {
-          if (error) error.hidden = false;
-          return;
-        }
-
-        if (error) error.hidden = true;
-        if (gate) gate.style.display = "none";
-        if (panel) {
-          panel.hidden = false;
-          panel.style.display = "block";
-        }
-        if (connection) connection.textContent = "Управление открыто";
-        localStorage.setItem("statusPanelUnlocked", "yes");
-
-        if (typeof window.startFirebasePanel === "function") {
-          window.startFirebasePanel();
-        }
-      };
-    </script>
+    <style>
+      .mini-status {
+        margin: 10px 0 0;
+        color: #626a76;
+        font-size: 16px;
+        min-height: 24px;
+      }
+    </style>
   </head>
   <body class="control-page">
-    <main id="controlGate" class="gate">
+    <main id="loginScreen" class="gate">
       <div class="gate-card">
         <h1>Управление</h1>
-        <input id="controlPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль" aria-label="Пароль" onkeydown="if(event.key === 'Enter'){ unlockPanel(); }">
-        <button type="button" onclick="unlockPanel()">Войти</button>
-        <p id="controlError" class="error" hidden>Неверный пароль</p>
+        <input id="passwordInput" type="password" inputmode="numeric" placeholder="Пароль" aria-label="Пароль">
+        <button id="loginButton" type="button">Войти</button>
+        <p id="loginError" class="error" hidden>Неверный пароль</p>
       </div>
     </main>
 
@@ -50,7 +28,7 @@
       <header class="panel-header">
         <div>
           <h1>Пульт экрана</h1>
-          <p id="connection">Подключено</p>
+          <p id="status">Готово</p>
         </div>
         <button id="blankButton" class="ghost-button" type="button">Очистить</button>
       </header>
@@ -66,6 +44,7 @@
           <input id="wordsToggle" type="checkbox">
           <span>Показывать слова</span>
         </label>
+        <p id="lastAction" class="mini-status"></p>
       </section>
 
       <section class="section">
@@ -100,51 +79,48 @@
     </main>
 
     <script>
-      window.panelPassword = "230493";
-      const stateUrl = "https://hhh3-635eb-default-rtdb.europe-west1.firebasedatabase.app/statusScreen/current.json";
+      const PASSWORD = "230493";
+      const STATE_URL = "https://hhh3-635eb-default-rtdb.europe-west1.firebasedatabase.app/statusScreen/current.json";
 
-      const gate = document.querySelector("#controlGate");
+      const loginScreen = document.querySelector("#loginScreen");
       const panel = document.querySelector("#panel");
-      const passwordInput = document.querySelector("#controlPassword");
-      const error = document.querySelector("#controlError");
+      const passwordInput = document.querySelector("#passwordInput");
+      const loginButton = document.querySelector("#loginButton");
+      const loginError = document.querySelector("#loginError");
+      const statusText = document.querySelector("#status");
+      const lastAction = document.querySelector("#lastAction");
       const wordsToggle = document.querySelector("#wordsToggle");
       const message = document.querySelector("#message");
-      const connection = document.querySelector("#connection");
       const orientationButtons = document.querySelectorAll("[data-orientation]");
 
-      let currentState = {
+      let state = {
         type: "blank",
         color: null,
         showWords: false,
         customText: "",
         media: null,
         orientation: "landscape",
+        updatedAt: Date.now(),
       };
 
-      window.unlockPanel = function () {
-        const typedPassword = passwordInput.value.replace(/\D/g, "");
-        if (typedPassword !== window.panelPassword) {
-          error.hidden = false;
+      loginButton.addEventListener("click", unlock);
+      passwordInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") unlock();
+      });
+
+      function unlock() {
+        const typed = passwordInput.value.replace(/\D/g, "");
+        if (typed !== PASSWORD) {
+          loginError.hidden = false;
           return;
         }
-        error.hidden = true;
-        localStorage.setItem("statusPanelUnlocked", "yes");
-        gate.style.display = "none";
+        loginError.hidden = true;
+        loginScreen.style.display = "none";
         panel.hidden = false;
         panel.style.display = "block";
-        openPanel();
-      };
-
-      if (localStorage.getItem("statusPanelUnlocked") === "yes") {
-        setTimeout(() => {
-          gate.style.display = "none";
-          panel.hidden = false;
-          panel.style.display = "block";
-          openPanel();
-        }, 0);
+        statusText.textContent = "Пульт открыт";
+        loadState();
       }
-
-      window.startFirebasePanel = openPanel;
 
       document.querySelectorAll("[data-color]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -172,7 +148,7 @@
       document.querySelector("#sendText").addEventListener("click", () => {
         sendState({
           type: "text",
-          customText: message.value.trim(),
+          customText: message.value,
           media: null,
         });
       });
@@ -194,61 +170,37 @@
         sendFile(event.target.files[0], "video");
       });
 
-      async function openPanel() {
-        gate.hidden = true;
-        panel.hidden = false;
-        connection.textContent = "Подключаю базу...";
+      async function loadState() {
         try {
-          await refreshState();
-          connection.textContent = "Подключено";
-        } catch {
-          connection.textContent = "База не подключилась";
+          const response = await fetch(`${STATE_URL}?t=${Date.now()}`, { cache: "no-store" });
+          const data = await response.json();
+          if (data) state = { ...state, ...data };
+          wordsToggle.checked = Boolean(state.showWords);
+          message.value = state.customText || "";
+          statusText.textContent = "База подключена";
+        } catch (error) {
+          statusText.textContent = "База не отвечает";
         }
-      }
-
-      async function refreshState() {
-        const response = await fetch(`${stateUrl}?t=${Date.now()}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("bad_response");
-        const data = await response.json();
-
-        if (!data) {
-          await fetch(stateUrl, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...currentState, updatedAt: Date.now() }),
-          });
-          return;
-        }
-
-        currentState = { ...currentState, ...data };
-        wordsToggle.checked = Boolean(currentState.showWords);
-        message.value = currentState.customText || "";
-        orientationButtons.forEach((button) => {
-          button.classList.toggle("active", button.dataset.orientation === currentState.orientation);
-        });
-      }
-
-      function renderControlsFromState() {
-        wordsToggle.checked = Boolean(currentState.showWords);
-        message.value = currentState.customText || "";
-        orientationButtons.forEach((button) => {
-          button.classList.toggle("active", button.dataset.orientation === currentState.orientation);
-        });
       }
 
       async function sendState(patch) {
-        currentState = { ...currentState, ...patch };
-        connection.textContent = "Отправляю...";
+        state = { ...state, ...patch, updatedAt: Date.now() };
+        statusText.textContent = "Отправляю...";
+        lastAction.textContent = "";
+
         try {
-          const response = await fetch(stateUrl, {
-            method: "PATCH",
+          const response = await fetch(STATE_URL, {
+            method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...patch, updatedAt: Date.now() }),
+            body: JSON.stringify(state),
           });
-          if (!response.ok) throw new Error("bad_response");
-          connection.textContent = "Подключено";
-        } catch {
-          connection.textContent = "Ошибка базы";
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const saved = await response.json();
+          statusText.textContent = "База приняла";
+          lastAction.textContent = `Отправлено: ${saved.type}${saved.color ? " / " + saved.color : ""}`;
+        } catch (error) {
+          statusText.textContent = "Ошибка отправки";
+          lastAction.textContent = error.message || "Не удалось записать в Firebase";
         }
       }
 
