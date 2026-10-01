@@ -12,6 +12,21 @@
         font-size: 16px;
         min-height: 24px;
       }
+
+      .color-pick-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .color-pick-row input {
+        width: 56px;
+        height: 44px;
+        padding: 0;
+        border: 1px solid #d9dde5;
+        border-radius: 8px;
+        background: #ffffff;
+      }
     </style>
   </head>
   <body class="control-page">
@@ -59,6 +74,10 @@
       <section class="section">
         <h2>Текст</h2>
         <textarea id="message" rows="4" placeholder="Напиши текст для экрана"></textarea>
+        <label class="color-pick-row">
+          <input id="textColor" type="color" value="#111111">
+          <span>Цвет текста</span>
+        </label>
         <button id="sendText" type="button">Готово</button>
       </section>
 
@@ -91,6 +110,7 @@
       const lastAction = document.querySelector("#lastAction");
       const wordsToggle = document.querySelector("#wordsToggle");
       const message = document.querySelector("#message");
+      const textColor = document.querySelector("#textColor");
       const orientationButtons = document.querySelectorAll("[data-orientation]");
 
       let state = {
@@ -100,6 +120,7 @@
         customText: "",
         media: null,
         orientation: "landscape",
+        textColor: "#111111",
         updatedAt: Date.now(),
       };
 
@@ -149,6 +170,7 @@
         sendState({
           type: "text",
           customText: message.value,
+          textColor: textColor.value,
           media: null,
         });
       });
@@ -177,6 +199,7 @@
           if (data) state = { ...state, ...data };
           wordsToggle.checked = Boolean(state.showWords);
           message.value = state.customText || "";
+          textColor.value = state.textColor || "#111111";
           statusText.textContent = "База подключена";
         } catch (error) {
           statusText.textContent = "База не отвечает";
