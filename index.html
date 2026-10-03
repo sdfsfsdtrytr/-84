@@ -250,8 +250,8 @@
         panel.hidden = false;
         panel.style.display = "block";
         statusText.textContent = "Пульт открыт";
-        loadState();
-        window.setInterval(loadState, 1200);
+        loadState(true);
+        window.setInterval(() => loadState(false), 1200);
       }
 
       document.querySelectorAll("[data-color]").forEach((button) => {
@@ -435,17 +435,19 @@
         sendFile(event.target.files[0], "video");
       });
 
-      async function loadState() {
+      async function loadState(syncControls) {
         try {
           const response = await fetch(`${STATE_URL}?t=${Date.now()}`, { cache: "no-store" });
           const data = await response.json();
           if (data) state = { ...state, ...data };
-          wordsToggle.checked = Boolean(state.showWords);
-          screenColor.value = state.customColor || "#19c15f";
-          message.value = state.customText || "";
-          textColor.value = state.textColor || "#111111";
-          textBackgroundEnabled.checked = Boolean(state.textBackgroundEnabled);
-          textBackgroundColor.value = state.textBackgroundColor || "#ffffff";
+          if (syncControls) {
+            wordsToggle.checked = Boolean(state.showWords);
+            screenColor.value = state.customColor || "#19c15f";
+            message.value = state.customText || "";
+            textColor.value = state.textColor || "#111111";
+            textBackgroundEnabled.checked = Boolean(state.textBackgroundEnabled);
+            textBackgroundColor.value = state.textBackgroundColor || "#ffffff";
+          }
           updateSystemButtons();
           statusText.textContent = "База подключена";
         } catch (error) {
