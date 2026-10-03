@@ -32,6 +32,28 @@
         display: grid;
         gap: 10px;
       }
+
+      .system-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .system-grid button {
+        min-height: 48px;
+        border: 1px solid #d9dde5;
+        border-radius: 8px;
+        padding: 12px;
+        background: #111318;
+        color: #ffffff;
+        font-weight: 800;
+      }
+
+      @media (max-width: 620px) {
+        .system-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body class="control-page">
@@ -115,6 +137,17 @@
         </div>
         <p class="hint">Лучше брать короткие видео до 20 МБ.</p>
       </section>
+
+      <section class="section">
+        <h2>Система</h2>
+        <div class="system-grid">
+          <button id="powerOffButton" type="button">Выключить экран</button>
+          <button id="powerOnButton" type="button">Включить экран</button>
+          <button id="restartButton" type="button">Перезагрузить экран</button>
+          <button id="maintenanceButton" type="button">Технические работы</button>
+          <button id="unavailableButton" type="button">Временно не работает</button>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -135,6 +168,8 @@
       const textBackgroundEnabled = document.querySelector("#textBackgroundEnabled");
       const textBackgroundColor = document.querySelector("#textBackgroundColor");
       const orientationButtons = document.querySelectorAll("[data-orientation]");
+      const maintenanceButton = document.querySelector("#maintenanceButton");
+      const unavailableButton = document.querySelector("#unavailableButton");
 
       let state = {
         type: "blank",
@@ -147,6 +182,9 @@
         textBackgroundEnabled: false,
         textBackgroundColor: "#ffffff",
         customColor: null,
+        systemMode: null,
+        savedState: null,
+        sequenceStartedAt: null,
         updatedAt: Date.now(),
       };
 
@@ -217,9 +255,72 @@
       document.querySelector("#blankButton").addEventListener("click", () => {
         sendState({
           type: "blank",
+          blankColor: "#000000",
           color: null,
           customText: "",
           media: null,
+        });
+      });
+
+      document.querySelector("#powerOffButton").addEventListener("click", () => {
+        const savedState = getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "off",
+          savedState,
+          sequenceStartedAt: Date.now(),
+        });
+      });
+
+      document.querySelector("#powerOnButton").addEventListener("click", () => {
+        const savedState = state.savedState || getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "startup",
+          savedState,
+          sequenceStartedAt: Date.now(),
+        });
+        restoreAfter(savedState, 11200);
+      });
+
+      document.querySelector("#restartButton").addEventListener("click", () => {
+        const savedState = state.savedState || getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "restart",
+          savedState,
+          sequenceStartedAt: Date.now(),
+        });
+        restoreAfter(savedState, 17200);
+      });
+
+      maintenanceButton.addEventListener("click", () => {
+        if (state.systemMode === "maintenance") {
+          const savedState = state.savedState || getRestorableState();
+          sendSystemState({ ...savedState, systemMode: null, savedState: null, sequenceStartedAt: null });
+          return;
+        }
+        const savedState = getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "maintenance",
+          savedState,
+          sequenceStartedAt: Date.now(),
+        });
+      });
+
+      unavailableButton.addEventListener("click", () => {
+        if (state.systemMode === "unavailable") {
+          const savedState = state.savedState || getRestorableState();
+          sendSystemState({ ...savedState, systemMode: null, savedState: null, sequenceStartedAt: null });
+          return;
+        }
+        const savedState = getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "unavailable",
+          savedState,
+          sequenceStartedAt: Date.now(),
         });
       });
 
@@ -242,6 +343,7 @@
           textColor.value = state.textColor || "#111111";
           textBackgroundEnabled.checked = Boolean(state.textBackgroundEnabled);
           textBackgroundColor.value = state.textBackgroundColor || "#ffffff";
+          updateSystemButtons();
           statusText.textContent = "База подключена";
         } catch (error) {
           statusText.textContent = "База не отвечает";
@@ -249,6 +351,11 @@
       }
 
       async function sendState(patch) {
+        if (isSystemLocked()) {
+          statusText.textContent = "Сначала отключи системный режим";
+          lastAction.textContent = "Обычные команды сейчас не отправляются";
+          return;
+        }
         state = { ...state, ...patch, updatedAt: Date.now() };
         statusText.textContent = "Отправляю...";
         lastAction.textContent = "";
@@ -261,12 +368,68 @@
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const saved = await response.json();
+          state = saved;
+          updateSystemButtons();
           statusText.textContent = "База приняла";
           lastAction.textContent = `Отправлено: ${saved.type}${saved.color ? " / " + saved.color : ""}`;
         } catch (error) {
           statusText.textContent = "Ошибка отправки";
           lastAction.textContent = error.message || "Не удалось записать в Firebase";
         }
+      }
+
+      async function sendSystemState(nextState) {
+        state = { ...state, ...nextState, updatedAt: Date.now() };
+        statusText.textContent = "Отправляю...";
+        lastAction.textContent = "";
+
+        try {
+          const response = await fetch(STATE_URL, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(state),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          state = await response.json();
+          updateSystemButtons();
+          statusText.textContent = "База приняла";
+          lastAction.textContent = "Системная команда отправлена";
+        } catch (error) {
+          statusText.textContent = "Ошибка отправки";
+          lastAction.textContent = error.message || "Не удалось записать в Firebase";
+        }
+      }
+
+      function restoreAfter(savedState, delay) {
+        window.setTimeout(() => {
+          if (state.systemMode !== "startup" && state.systemMode !== "restart") return;
+          sendSystemState({ ...savedState, systemMode: null, savedState: null, sequenceStartedAt: null });
+        }, delay);
+      }
+
+      function getRestorableState() {
+        const source = state.savedState && isSystemLocked() ? state.savedState : state;
+        const {
+          systemMode,
+          savedState,
+          sequenceStartedAt,
+          updatedAt,
+          ...rest
+        } = source;
+        return { ...rest };
+      }
+
+      function isSystemLocked() {
+        return ["off", "startup", "restart", "maintenance", "unavailable"].includes(state.systemMode);
+      }
+
+      function updateSystemButtons() {
+        maintenanceButton.textContent = state.systemMode === "maintenance"
+          ? "Отключить техработы"
+          : "Технические работы";
+        unavailableButton.textContent = state.systemMode === "unavailable"
+          ? "Отключить временно не работает"
+          : "Временно не работает";
       }
 
       function sendFile(file, type) {
