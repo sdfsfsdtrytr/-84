@@ -49,6 +49,35 @@
         font-weight: 800;
       }
 
+      .admin-request {
+        display: grid;
+        gap: 10px;
+        border: 1px solid #d9dde5;
+        border-radius: 8px;
+        padding: 12px;
+        background: #ffffff;
+      }
+
+      .admin-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .admin-actions button {
+        min-height: 44px;
+        border: 1px solid #d9dde5;
+        border-radius: 8px;
+        padding: 10px;
+        font-weight: 800;
+      }
+
+      #approveAdminButton {
+        background: #19c15f;
+        border-color: #19c15f;
+        color: #ffffff;
+      }
+
       @media (max-width: 620px) {
         .system-grid {
           grid-template-columns: 1fr;
@@ -146,6 +175,16 @@
           <button id="restartButton" type="button">Перезагрузить экран</button>
           <button id="maintenanceButton" type="button">Технические работы</button>
           <button id="unavailableButton" type="button">Временно не работает</button>
+          <button id="adminButton" type="button">Попасть в админку</button>
+          <button id="updateButton" type="button">Обновить</button>
+          <button id="exitAdminButton" type="button" hidden>Выйти из админ-панели</button>
+        </div>
+        <div id="adminRequestBox" class="admin-request" hidden>
+          <strong>Вы хотите подтвердить вход в админ-панель?</strong>
+          <div class="admin-actions">
+            <button id="approveAdminButton" type="button">Подтвердить</button>
+            <button id="declineAdminButton" type="button">Отклонить</button>
+          </div>
         </div>
       </section>
     </main>
@@ -170,6 +209,12 @@
       const orientationButtons = document.querySelectorAll("[data-orientation]");
       const maintenanceButton = document.querySelector("#maintenanceButton");
       const unavailableButton = document.querySelector("#unavailableButton");
+      const adminButton = document.querySelector("#adminButton");
+      const updateButton = document.querySelector("#updateButton");
+      const exitAdminButton = document.querySelector("#exitAdminButton");
+      const adminRequestBox = document.querySelector("#adminRequestBox");
+      const approveAdminButton = document.querySelector("#approveAdminButton");
+      const declineAdminButton = document.querySelector("#declineAdminButton");
 
       let state = {
         type: "blank",
@@ -185,6 +230,7 @@
         systemMode: null,
         savedState: null,
         sequenceStartedAt: null,
+        adminRequestStatus: null,
         updatedAt: Date.now(),
       };
 
@@ -205,6 +251,7 @@
         panel.style.display = "block";
         statusText.textContent = "Пульт открыт";
         loadState();
+        window.setInterval(loadState, 1200);
       }
 
       document.querySelectorAll("[data-color]").forEach((button) => {
@@ -324,6 +371,62 @@
         });
       });
 
+      adminButton.addEventListener("click", () => {
+        const savedState = getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "admin-login",
+          savedState,
+          adminRequestStatus: "entering",
+          sequenceStartedAt: Date.now(),
+        });
+      });
+
+      approveAdminButton.addEventListener("click", () => {
+        const savedState = state.savedState || getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "admin-panel",
+          savedState,
+          adminRequestStatus: "approved",
+          sequenceStartedAt: Date.now(),
+        });
+      });
+
+      declineAdminButton.addEventListener("click", () => {
+        const savedState = state.savedState || getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "admin-denied",
+          savedState,
+          adminRequestStatus: "declined",
+          sequenceStartedAt: Date.now(),
+        });
+        restoreAfterExact("admin-denied", savedState, 2200);
+      });
+
+      exitAdminButton.addEventListener("click", () => {
+        const savedState = state.savedState || getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: null,
+          savedState: null,
+          adminRequestStatus: null,
+          sequenceStartedAt: null,
+        });
+      });
+
+      updateButton.addEventListener("click", () => {
+        const savedState = getRestorableState();
+        sendSystemState({
+          ...savedState,
+          systemMode: "update",
+          savedState,
+          sequenceStartedAt: Date.now(),
+        });
+        restoreAfterExact("update", savedState, 130000);
+      });
+
       document.querySelector("#imageInput").addEventListener("change", (event) => {
         sendFile(event.target.files[0], "image");
       });
@@ -407,6 +510,19 @@
         }, delay);
       }
 
+      function restoreAfterExact(mode, savedState, delay) {
+        window.setTimeout(() => {
+          if (state.systemMode !== mode) return;
+          sendSystemState({
+            ...savedState,
+            systemMode: null,
+            savedState: null,
+            adminRequestStatus: null,
+            sequenceStartedAt: null,
+          });
+        }, delay);
+      }
+
       function getRestorableState() {
         const source = state.savedState && isSystemLocked() ? state.savedState : state;
         const {
@@ -420,7 +536,7 @@
       }
 
       function isSystemLocked() {
-        return ["off", "startup", "restart", "maintenance", "unavailable"].includes(state.systemMode);
+        return ["off", "startup", "restart", "maintenance", "unavailable", "admin-login", "admin-panel", "admin-denied", "update"].includes(state.systemMode);
       }
 
       function updateSystemButtons() {
@@ -430,6 +546,9 @@
         unavailableButton.textContent = state.systemMode === "unavailable"
           ? "Отключить временно не работает"
           : "Временно не работает";
+        exitAdminButton.hidden = state.systemMode !== "admin-panel";
+        adminButton.hidden = state.systemMode === "admin-panel";
+        adminRequestBox.hidden = !(state.systemMode === "admin-login" && state.adminRequestStatus === "pending");
       }
 
       function sendFile(file, type) {
