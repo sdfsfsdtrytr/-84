@@ -343,6 +343,7 @@
           systemMode: "off",
           savedState,
           sequenceStartedAt: Date.now(),
+          screenOnlineAt: 0,
         });
       });
 
@@ -515,6 +516,7 @@
         state = { ...state, ...nextState, updatedAt: Date.now() };
         statusText.textContent = "Отправляю...";
         lastAction.textContent = "";
+        updateOnlineStatus();
 
         try {
           const response = await fetch(STATE_URL, {
@@ -583,7 +585,7 @@
 
       function updateOnlineStatus() {
         const onlineAt = Number(state.screenOnlineAt || 0);
-        const isOnline = onlineAt && Date.now() - onlineAt < 10000;
+        const isOnline = state.systemMode !== "off" && onlineAt && Date.now() - onlineAt < 10000;
         statusText.classList.toggle("offline-status", !isOnline);
         statusText.textContent = isOnline ? "Экран в сети" : "Экран не в сети";
         onlineBanner.classList.toggle("offline", !isOnline);
