@@ -13,6 +13,11 @@
         min-height: 24px;
       }
 
+      .offline-status {
+        color: #ef3939;
+        font-weight: 900;
+      }
+
       .color-pick-row {
         display: flex;
         align-items: center;
@@ -449,9 +454,10 @@
             textBackgroundColor.value = state.textBackgroundColor || "#ffffff";
           }
           updateSystemButtons();
-          statusText.textContent = "База подключена";
+          updateOnlineStatus();
         } catch (error) {
           statusText.textContent = "База не отвечает";
+          statusText.classList.add("offline-status");
         }
       }
 
@@ -551,6 +557,13 @@
         exitAdminButton.hidden = state.systemMode !== "admin-panel";
         adminButton.hidden = state.systemMode === "admin-panel";
         adminRequestBox.hidden = !(state.systemMode === "admin-login" && state.adminRequestStatus === "pending");
+      }
+
+      function updateOnlineStatus() {
+        const onlineAt = Number(state.screenOnlineAt || 0);
+        const isOnline = onlineAt && Date.now() - onlineAt < 10000;
+        statusText.classList.toggle("offline-status", !isOnline);
+        statusText.textContent = isOnline ? "Экран в сети" : "Экран не в сети";
       }
 
       function sendFile(file, type) {
