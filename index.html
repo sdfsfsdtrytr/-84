@@ -18,6 +18,24 @@
         font-weight: 900;
       }
 
+      .online-banner {
+        display: grid;
+        place-items: center;
+        min-height: 46px;
+        margin: 0 0 12px;
+        border: 1px solid #d9dde5;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #19c15f;
+        font-weight: 900;
+      }
+
+      .online-banner.offline {
+        border-color: #ef3939;
+        background: #fff4f4;
+        color: #ef3939;
+      }
+
       .color-pick-row {
         display: flex;
         align-items: center;
@@ -108,6 +126,8 @@
         </div>
         <button id="blankButton" class="ghost-button" type="button">Очистить</button>
       </header>
+
+      <div id="onlineBanner" class="online-banner offline">Экран не в сети</div>
 
       <section class="section">
         <h2>Цвет</h2>
@@ -204,6 +224,7 @@
       const loginButton = document.querySelector("#loginButton");
       const loginError = document.querySelector("#loginError");
       const statusText = document.querySelector("#status");
+      const onlineBanner = document.querySelector("#onlineBanner");
       const lastAction = document.querySelector("#lastAction");
       const wordsToggle = document.querySelector("#wordsToggle");
       const screenColor = document.querySelector("#screenColor");
@@ -257,6 +278,7 @@
         statusText.textContent = "Пульт открыт";
         loadState(true);
         window.setInterval(() => loadState(false), 1200);
+        window.setInterval(updateOnlineStatus, 1000);
       }
 
       document.querySelectorAll("[data-color]").forEach((button) => {
@@ -564,6 +586,8 @@
         const isOnline = onlineAt && Date.now() - onlineAt < 10000;
         statusText.classList.toggle("offline-status", !isOnline);
         statusText.textContent = isOnline ? "Экран в сети" : "Экран не в сети";
+        onlineBanner.classList.toggle("offline", !isOnline);
+        onlineBanner.textContent = isOnline ? "Экран в сети" : "Экран не в сети";
       }
 
       function sendFile(file, type) {
